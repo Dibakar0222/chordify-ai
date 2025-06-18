@@ -1,10 +1,9 @@
 
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useEffect, useState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { getSongDetailsAction, type SongDataState, type FetchSongDataOutput } from '@/app/actions';
-import { useEffect, useState } from 'react';
+import { getSongDetailsAction, type SongDataState } from '@/app/actions';
 import { useToast } from '@/hooks/use-toast';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -12,10 +11,11 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Search, Music, FileText, Guitar } from 'lucide-react';
+import { Search, Music, FileText, Guitar, CassetteTape } from 'lucide-react';
 
 const initialState: SongDataState = {
   data: null,
+  backingTrackUrl: null,
   error: null,
   message: null,
   inputContentType: null,
@@ -44,7 +44,7 @@ function SubmitButton() {
 
 function ResultsDisplay({ state }: { state: SongDataState }) {
   const { pending } = useFormStatus();
-  const { data, inputContentType } = state;
+  const { data, inputContentType, backingTrackUrl } = state;
 
   const [initialLoad, setInitialLoad] = useState(true);
 
@@ -58,7 +58,7 @@ function ResultsDisplay({ state }: { state: SongDataState }) {
   if (pending) {
     return (
       <div className="space-y-8 mt-8">
-        {[1, 2].map((i) => (
+        {[1, 2, 3].map((i) => (
           <Card key={i} className="shadow-lg animate-pulse">
             <CardHeader>
               <Skeleton className="h-7 w-1/3 rounded" />
@@ -75,7 +75,7 @@ function ResultsDisplay({ state }: { state: SongDataState }) {
     );
   }
   
-  if (initialLoad && !data && !state.error && !state.message) {
+  if (initialLoad && !data && !backingTrackUrl && !state.error && !state.message) {
      return (
         <div className="mt-8 text-center py-10">
           <Music className="mx-auto h-16 w-16 text-muted-foreground opacity-50 mb-4" />
@@ -84,19 +84,30 @@ function ResultsDisplay({ state }: { state: SongDataState }) {
       );
   }
 
-  if (!data || (!data.lyrics && !data.chords && !data.tabs)) {
-    if (state.message && !state.error) { // Only show "No content found" if there's a specific message for it
-         // Message is handled by toast
-    }
-    return null; // Toasts will display messages/errors
+  const noSongDetails = !data || (!data.lyrics && !data.chords && !data.tabs);
+  if (noSongDetails && !backingTrackUrl) {
+    // Messages/errors are handled by toasts based on state.message or state.error
+    return null; 
   }
 
-
-  const { lyrics, chords, tabs } = data;
+  const { lyrics, chords, tabs } = data || {};
   let contentDisplayed = false;
 
   return (
     <div className="space-y-8 mt-8">
+      {backingTrackUrl && (
+        <Card className="shadow-lg">
+          <CardHeader>
+            <CardTitle className="font-headline text-2xl flex items-center text-primary"><CassetteTape className="mr-3 h-7 w-7" /> Backing Track</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <audio controls src={backingTrackUrl} className="w-full rounded-md shadow">
+              Your browser does not support the audio element.
+            </audio>
+            {(() => {contentDisplayed = true; return null;})()}
+          </CardContent>
+        </Card>
+      )}
       {lyrics && inputContentType === 'lyrics' && (
         <Card className="shadow-lg">
           <CardHeader>
@@ -133,11 +144,6 @@ function ResultsDisplay({ state }: { state: SongDataState }) {
           </CardContent>
         </Card>
       )}
-      {!contentDisplayed && state.message && !state.error && (
-         <div className="mt-8 text-center py-10">
-             {/* Message already handled by toast */}
-         </div>
-      )}
     </div>
   );
 }
@@ -154,15 +160,36 @@ export default function ChordifyApp() {
         description: state.error,
         variant: "destructive",
       });
-    }
-    if (state.message) {
+    } else if (state.message) { 
         toast({
             title: "Information",
-            description: state.message,
+            description: state.message, // This message comes from the server action
             variant: "default", 
         });
+    } else {
+      // If no error and no specific message from action, implies some data might have been fetched.
+      // Inform about the backing track specifically if it's relevant and no overriding message from action.
+      const songDetailsExist = state.data && (state.data.lyrics || state.data.chords || state.data.tabs);
+      const songNameInput = document.getElementById('songName') as HTMLInputElement | null;
+      const songName = songNameInput?.value || "the song";
+
+      if (state.backingTrackUrl) { 
+        toast({
+          title: "Backing Track",
+          description: `Found a backing track for "${songName}".`,
+          variant: "default",
+        });
+      } else if (songDetailsExist && !state.backingTrackUrl) { 
+        // Only mention missing backing track if other details were found.
+        // If nothing was found, state.message from action should cover it.
+        toast({
+          title: "Backing Track",
+          description: `No backing track was found for "${songName}".`,
+          variant: "default",
+        });
+      }
     }
-  }, [state.error, state.message, toast]);
+  }, [state, toast]);
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-3xl">
@@ -174,7 +201,7 @@ export default function ChordifyApp() {
           ChordifyAI
         </h1>
         <p className="text-muted-foreground text-md sm:text-lg mt-2">
-          Discover lyrics, chords, and tabs for any song, powered by AI.
+          Discover lyrics, chords, tabs, and backing tracks for any song, powered by AI.
         </p>
       </header>
 
@@ -183,7 +210,7 @@ export default function ChordifyApp() {
           <CardHeader>
             <CardTitle className="font-headline text-xl sm:text-2xl text-primary">Find Your Song</CardTitle>
             <CardDescription className="text-base">
-              Enter the song name and select the content type you're looking for.
+              Enter the song name and select the content type. We'll also try to find a backing track!
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
