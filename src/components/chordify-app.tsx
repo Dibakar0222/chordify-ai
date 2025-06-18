@@ -1,6 +1,7 @@
 'use client';
 
-import { useFormState, useFormStatus } from 'react-dom';
+import { useActionState } from 'react'; // Changed from 'react-dom'
+import { useFormStatus } from 'react-dom'; // useFormStatus remains in react-dom
 import { getSongDetailsAction, type SongDataState, type FetchSongDataOutput } from '@/app/actions';
 import { useEffect, useState } from 'react';
 import { useToast } from '@/hooks/use-toast';
@@ -142,7 +143,7 @@ function ResultsDisplay({ state }: { state: SongDataState }) {
 
 
 export default function ChordifyApp() {
-  const [state, formAction] = useFormState(getSongDetailsAction, initialState);
+  const [state, formAction] = useActionState(getSongDetailsAction, initialState); // Changed useFormState to useActionState
   const { toast } = useToast();
 
   useEffect(() => {
